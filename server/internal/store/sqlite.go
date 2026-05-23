@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_config_versions_id_ver ON config_versions(config_
 CREATE TABLE IF NOT EXISTS users (
 	id            TEXT PRIMARY KEY,
 	email         TEXT UNIQUE NOT NULL,
-	password_hash TEXT NOT NULL DEFAULT '',
+	password_hash TEXT NOT NULL,
 	created_at    DATETIME NOT NULL
 );
 
@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS project_members (
 	project    TEXT NOT NULL,
 	role       TEXT NOT NULL,
 	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
 	PRIMARY KEY(user_id, project)
 );
 
@@ -547,21 +548,23 @@ func hashKey(rawKey string) string {
 // ---------------------------------------------------------------------------
 
 func (s *SQLite) SetProjectMember(ctx context.Context, m *model.ProjectMember) error {
+	now := time.Now().UTC()
 	if m.CreatedAt.IsZero() {
-		m.CreatedAt = time.Now().UTC()
+		m.CreatedAt = now
 	}
+	m.UpdatedAt = now
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO project_members(user_id, project, role, created_at) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(user_id, project) DO UPDATE SET role=excluded.role`,
-		m.UserID, m.Project, m.Role, m.CreatedAt)
+		`INSERT INTO project_members(user_id, project, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id, project) DO UPDATE SET role=excluded.role, updated_at=excluded.updated_at`,
+		m.UserID, m.Project, m.Role, m.CreatedAt, m.UpdatedAt)
 	return err
 }
 
 func (s *SQLite) GetProjectMember(ctx context.Context, userID, project string) (*model.ProjectMember, error) {
 	var m model.ProjectMember
 	err := s.db.QueryRowContext(ctx,
-		`SELECT user_id, project, role, created_at FROM project_members WHERE user_id=? AND project=?`,
-		userID, project).Scan(&m.UserID, &m.Project, &m.Role, &m.CreatedAt)
+		`SELECT user_id, project, role, created_at, updated_at FROM project_members WHERE user_id=? AND project=?`,
+		userID, project).Scan(&m.UserID, &m.Project, &m.Role, &m.CreatedAt, &m.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -570,7 +573,7 @@ func (s *SQLite) GetProjectMember(ctx context.Context, userID, project string) (
 
 func (s *SQLite) ListProjectMembers(ctx context.Context, project string) ([]model.ProjectMember, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT user_id, project, role, created_at FROM project_members WHERE project=? ORDER BY user_id`,
+		`SELECT user_id, project, role, created_at, updated_at FROM project_members WHERE project=? ORDER BY user_id`,
 		project)
 	if err != nil {
 		return nil, err
@@ -579,7 +582,7 @@ func (s *SQLite) ListProjectMembers(ctx context.Context, project string) ([]mode
 	var out []model.ProjectMember
 	for rows.Next() {
 		var m model.ProjectMember
-		if err := rows.Scan(&m.UserID, &m.Project, &m.Role, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Project, &m.Role, &m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -599,7 +602,7 @@ func (s *SQLite) AppendAudit(ctx context.Context, e *model.AuditEvent) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO audit(id, actor, action, resource, project, environment, before, after, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.Actor, e.Action, e.Resource, e.Project, e.Env, e.Before, e.After, e.CreatedAt)
+		e.ID, e.Actor, e.Action, e.Resource, e.Project, e.Environment, e.Before, e.After, e.CreatedAt)
 	return err
 }
 
@@ -616,7 +619,7 @@ func (s *SQLite) ListAudit(ctx context.Context, project string, limit int) ([]mo
 	for rows.Next() {
 		var e model.AuditEvent
 		if err := rows.Scan(&e.ID, &e.Actor, &e.Action, &e.Resource,
-			&e.Project, &e.Env, &e.Before, &e.After, &e.CreatedAt); err != nil {
+			&e.Project, &e.Environment, &e.Before, &e.After, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
