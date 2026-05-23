@@ -31,7 +31,7 @@ type Store interface {
 	ListUsers(ctx context.Context) ([]model.User, error)
 
 	// API Keys
-	CreateAPIKey(ctx context.Context, k *model.APIKey) error
+	CreateAPIKey(ctx context.Context, k *model.APIKey, actor string) error
 	// GetUserByAPIKey hashes rawKey with SHA-256 and looks up the matching api_key row,
 	// then loads the associated user. Returns both so the caller can update LastUsedAt.
 	GetUserByAPIKey(ctx context.Context, rawKey string) (*model.User, *model.APIKey, error)

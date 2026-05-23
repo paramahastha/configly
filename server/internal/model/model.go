@@ -98,6 +98,7 @@ type APIKey struct {
 	Prefix     string     `json:"prefix"` // first 8 chars, shown in listings
 	KeyHash    string     `json:"-"`
 	CreatedAt  time.Time  `json:"created_at"`
+	CreatedBy  string     `json:"created_by"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }

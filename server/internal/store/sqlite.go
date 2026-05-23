@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_config_versions_id_ver ON config_versions(config_
 CREATE TABLE IF NOT EXISTS users (
 	id            TEXT PRIMARY KEY,
 	email         TEXT UNIQUE NOT NULL,
-	password_hash TEXT NOT NULL,
+	password_hash VARCHAR(64) NOT NULL,
 	created_at    DATETIME NOT NULL
 );
 
@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 	prefix       TEXT NOT NULL DEFAULT '',
 	key_hash     TEXT UNIQUE NOT NULL,
 	created_at   DATETIME NOT NULL,
+	created_by   TEXT NOT NULL DEFAULT '',
 	last_used_at DATETIME,
 	expires_at   DATETIME
 );
@@ -485,15 +486,16 @@ func (s *SQLite) ListUsers(ctx context.Context) ([]model.User, error) {
 // API Keys
 // ---------------------------------------------------------------------------
 
-func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey) error {
+func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey, actor string) error {
 	if k.ID == "" {
 		k.ID = uuid.NewString()
 	}
 	k.CreatedAt = time.Now().UTC()
+	k.CreatedBy = actor
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO api_keys(id, user_id, name, prefix, key_hash, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		k.ID, k.UserID, k.Name, k.Prefix, k.KeyHash, k.CreatedAt, nullableTime(k.ExpiresAt))
+		`INSERT INTO api_keys(id, user_id, name, prefix, key_hash, created_at, created_by, expires_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		k.ID, k.UserID, k.Name, k.Prefix, k.KeyHash, k.CreatedAt, actor, nullableTime(k.ExpiresAt))
 	return err
 }
 
