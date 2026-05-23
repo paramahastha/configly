@@ -71,9 +71,12 @@ type ConfigVersion struct {
 	CreatedBy   string          `json:"created_by"`
 }
 
+// User holds identity and a system-level role (admin = can manage all projects/users).
+// Fine-grained per-project permissions live in ProjectMember; both are consulted by the auth layer.
 type User struct {
 	ID           string     `json:"id"`
 	Email        string     `json:"email"`
+	Role         Role       `json:"role"` // system role: admin bypasses project-scoped checks
 	PasswordHash string     `json:"-"`
 	CreatedAt    time.Time  `json:"created_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`

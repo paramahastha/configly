@@ -222,3 +222,392 @@ func TestListAudit(t *testing.T) {
 		t.Fatalf("expected oldest event last (alice), got %q", got[2].Actor)
 	}
 }
+
+// TestConfigCreatedAtPopulated: created_at and created_by are set on insert and preserved on update.
+func TestConfigCreatedAtPopulated(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "p", "e")
+
+	c := &model.Config{Project: "p", Environment: "e", Key: "k", Type: model.ConfigTypeString, Value: "v1"}
+	if err := s.UpsertConfig(ctx, c, "alice"); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	if c.CreatedAt.IsZero() {
+		t.Fatal("CreatedAt must be set after insert")
+	}
+	if c.CreatedBy != "alice" {
+		t.Fatalf("CreatedBy: want alice, got %q", c.CreatedBy)
+	}
+	createdAt := c.CreatedAt
+
+	c.Value = "v2"
+	if err := s.UpsertConfig(ctx, c, "bob"); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	got, _ := s.GetConfig(ctx, "p", "e", "k")
+	if got.CreatedBy != "alice" {
+		t.Fatalf("CreatedBy must not change on update: got %q", got.CreatedBy)
+	}
+	if !got.CreatedAt.Equal(createdAt) {
+		t.Fatalf("CreatedAt must not change on update")
+	}
+	if got.UpdatedBy != "bob" {
+		t.Fatalf("UpdatedBy: want bob, got %q", got.UpdatedBy)
+	}
+}
+
+// TestETagCoversAllFields: changes to type, rollout, and rules must change the ETag.
+func TestETagCoversAllFields(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "p", "e")
+
+	c := &model.Config{Project: "p", Environment: "e", Key: "k", Type: model.ConfigTypeString, Value: "v", Rollout: 0}
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	snap1, _ := s.Snapshot(ctx, "p", "e")
+
+	// Change rollout only — value unchanged.
+	c.Rollout = 50
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("rollout update: %v", err)
+	}
+	snap2, _ := s.Snapshot(ctx, "p", "e")
+	if snap1.ETag == snap2.ETag {
+		t.Fatal("ETag must change when rollout changes")
+	}
+
+	// Change type only.
+	c.Type = model.ConfigTypeBool
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("type update: %v", err)
+	}
+	snap3, _ := s.Snapshot(ctx, "p", "e")
+	if snap2.ETag == snap3.ETag {
+		t.Fatal("ETag must change when type changes")
+	}
+
+	// Change rules only.
+	c.Rules = []byte(`{"pct":10}`)
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("rules update: %v", err)
+	}
+	snap4, _ := s.Snapshot(ctx, "p", "e")
+	if snap3.ETag == snap4.ETag {
+		t.Fatal("ETag must change when rules change")
+	}
+}
+
+// TestSnapshotUpdatedAt: UpdatedAt reflects the latest config update, not server time.
+func TestSnapshotUpdatedAt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "p", "e")
+
+	before := time.Now()
+	c := &model.Config{Project: "p", Environment: "e", Key: "k", Type: model.ConfigTypeString, Value: "v"}
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	snap, _ := s.Snapshot(ctx, "p", "e")
+	if snap.UpdatedAt.Before(before) || snap.UpdatedAt.After(time.Now()) {
+		t.Fatalf("Snapshot.UpdatedAt out of range: %v", snap.UpdatedAt)
+	}
+	// Must equal the config's UpdatedAt, not an arbitrary server timestamp.
+	got, _ := s.GetConfig(ctx, "p", "e", "k")
+	if !snap.UpdatedAt.Equal(got.UpdatedAt) {
+		t.Fatalf("Snapshot.UpdatedAt=%v does not match config.UpdatedAt=%v", snap.UpdatedAt, got.UpdatedAt)
+	}
+}
+
+// TestDeleteConfig: soft-deleted config is invisible to Get and List.
+func TestDeleteConfig(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "p", "e")
+	c := &model.Config{Project: "p", Environment: "e", Key: "k", Type: model.ConfigTypeString, Value: "v"}
+	if err := s.UpsertConfig(ctx, c, "actor"); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := s.DeleteConfig(ctx, "p", "e", "k", "actor"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	got, err := s.GetConfig(ctx, "p", "e", "k")
+	if err != nil {
+		t.Fatalf("GetConfig: %v", err)
+	}
+	if got != nil {
+		t.Fatal("deleted config must not be returned by GetConfig")
+	}
+
+	list, _ := s.ListConfigs(ctx, "p", "e")
+	for _, lc := range list {
+		if lc.Key == "k" {
+			t.Fatal("deleted config must not appear in ListConfigs")
+		}
+	}
+}
+
+// TestDeleteEnvironment: soft-deleted environment disappears from ListEnvironments.
+func TestDeleteEnvironment(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "p", "staging")
+	seedEnv(t, s, "p", "prod")
+
+	if err := s.DeleteEnvironment(ctx, "p", "staging"); err != nil {
+		t.Fatalf("DeleteEnvironment: %v", err)
+	}
+
+	envs, err := s.ListEnvironments(ctx, "p")
+	if err != nil {
+		t.Fatalf("ListEnvironments: %v", err)
+	}
+	for _, e := range envs {
+		if e.Name == "staging" {
+			t.Fatal("deleted environment must not appear in ListEnvironments")
+		}
+	}
+	if len(envs) != 1 || envs[0].Name != "prod" {
+		t.Fatalf("expected only prod, got %v", envs)
+	}
+}
+
+// TestListProjects: projects are derived from their environments.
+func TestListProjects(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seedEnv(t, s, "alpha", "dev")
+	seedEnv(t, s, "beta", "dev")
+	seedEnv(t, s, "gamma", "dev")
+
+	projects, err := s.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	want := []string{"alpha", "beta", "gamma"}
+	if len(projects) != len(want) {
+		t.Fatalf("expected %v, got %v", want, projects)
+	}
+	for i, p := range projects {
+		if p != want[i] {
+			t.Fatalf("projects[%d]: want %q, got %q", i, want[i], p)
+		}
+	}
+}
+
+// TestCreateAndGetUser: create a user, retrieve by email, verify fields round-trip.
+func TestCreateAndGetUser(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "alice@example.com", PasswordHash: "hash", Role: model.RoleAdmin}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if u.ID == "" {
+		t.Fatal("ID must be set after CreateUser")
+	}
+
+	got, err := s.GetUserByEmail(ctx, "alice@example.com")
+	if err != nil || got == nil {
+		t.Fatalf("GetUserByEmail: %v, %v", got, err)
+	}
+	if got.Role != model.RoleAdmin {
+		t.Fatalf("Role: want admin, got %q", got.Role)
+	}
+	if got.PasswordHash != "hash" {
+		t.Fatal("PasswordHash must round-trip")
+	}
+
+	users, err := s.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if len(users) != 1 || users[0].Email != "alice@example.com" {
+		t.Fatalf("ListUsers returned unexpected results: %v", users)
+	}
+}
+
+// TestDeleteUser: soft-deleted user is invisible to GetUserByEmail, ListUsers,
+// and GetUserByAPIKey.
+func TestDeleteUser(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "bob@example.com", PasswordHash: "h"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.DeleteUser(ctx, u.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+
+	got, _ := s.GetUserByEmail(ctx, "bob@example.com")
+	if got != nil {
+		t.Fatal("deleted user must not be returned by GetUserByEmail")
+	}
+
+	users, _ := s.ListUsers(ctx)
+	for _, lu := range users {
+		if lu.ID == u.ID {
+			t.Fatal("deleted user must not appear in ListUsers")
+		}
+	}
+}
+
+// TestCreateAndRevokeAPIKey: create key → lookup works; revoke → lookup returns nil.
+func TestCreateAndRevokeAPIKey(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "carol@example.com", PasswordHash: "h"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	rawKey := "supersecretkey1234"
+	k := &model.APIKey{
+		UserID:  u.ID,
+		Name:    "test-key",
+		Prefix:  rawKey[:8],
+		KeyHash: store.HashAPIKey(rawKey),
+	}
+	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+
+	foundUser, foundKey, err := s.GetUserByAPIKey(ctx, rawKey)
+	if err != nil || foundUser == nil || foundKey == nil {
+		t.Fatalf("GetUserByAPIKey: user=%v key=%v err=%v", foundUser, foundKey, err)
+	}
+	if foundUser.Email != "carol@example.com" {
+		t.Fatalf("unexpected user email: %q", foundUser.Email)
+	}
+
+	if err := s.RevokeAPIKey(ctx, k.ID); err != nil {
+		t.Fatalf("RevokeAPIKey: %v", err)
+	}
+
+	u2, k2, err := s.GetUserByAPIKey(ctx, rawKey)
+	if err != nil {
+		t.Fatalf("GetUserByAPIKey after revoke: %v", err)
+	}
+	if u2 != nil || k2 != nil {
+		t.Fatal("revoked key must not be found")
+	}
+}
+
+// TestExpiredAPIKey: a key whose expires_at is in the past must not be returned.
+func TestExpiredAPIKey(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "expired@example.com", PasswordHash: "h"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	past := time.Now().UTC().Add(-time.Hour)
+	rawKey := "expiredkey9999"
+	k := &model.APIKey{
+		UserID:    u.ID,
+		Name:      "old-key",
+		Prefix:    rawKey[:8],
+		KeyHash:   store.HashAPIKey(rawKey),
+		ExpiresAt: &past,
+	}
+	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+
+	foundUser, foundKey, err := s.GetUserByAPIKey(ctx, rawKey)
+	if err != nil {
+		t.Fatalf("GetUserByAPIKey: %v", err)
+	}
+	if foundUser != nil || foundKey != nil {
+		t.Fatal("expired key must not authenticate")
+	}
+}
+
+// TestUpdateLastUsedAt: last_used_at is persisted and returned on next lookup.
+func TestUpdateLastUsedAt(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "dave@example.com", PasswordHash: "h"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	rawKey := "anotherkey5678"
+	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8], KeyHash: store.HashAPIKey(rawKey)}
+	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+
+	ts := time.Now().UTC().Truncate(time.Second)
+	if err := s.UpdateLastUsedAt(ctx, k.ID, ts); err != nil {
+		t.Fatalf("UpdateLastUsedAt: %v", err)
+	}
+
+	_, foundKey, _ := s.GetUserByAPIKey(ctx, rawKey)
+	if foundKey == nil || foundKey.LastUsedAt == nil {
+		t.Fatal("LastUsedAt must be set after UpdateLastUsedAt")
+	}
+	if !foundKey.LastUsedAt.Truncate(time.Second).Equal(ts) {
+		t.Fatalf("LastUsedAt: want %v, got %v", ts, foundKey.LastUsedAt)
+	}
+}
+
+// TestSetAndGetProjectMember: upsert role, re-upsert to change it, verify.
+func TestSetAndGetProjectMember(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u := &model.User{Email: "eve@example.com", PasswordHash: "h"}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	m := &model.ProjectMember{UserID: u.ID, Project: "proj", Role: model.RoleViewer}
+	if err := s.SetProjectMember(ctx, m); err != nil {
+		t.Fatalf("SetProjectMember: %v", err)
+	}
+
+	got, err := s.GetProjectMember(ctx, u.ID, "proj")
+	if err != nil || got == nil {
+		t.Fatalf("GetProjectMember: %v, %v", got, err)
+	}
+	if got.Role != model.RoleViewer {
+		t.Fatalf("Role: want viewer, got %q", got.Role)
+	}
+
+	// Promote to editor.
+	m.Role = model.RoleEditor
+	if err := s.SetProjectMember(ctx, m); err != nil {
+		t.Fatalf("SetProjectMember (update): %v", err)
+	}
+	got2, _ := s.GetProjectMember(ctx, u.ID, "proj")
+	if got2.Role != model.RoleEditor {
+		t.Fatalf("Role after update: want editor, got %q", got2.Role)
+	}
+
+	members, err := s.ListProjectMembers(ctx, "proj")
+	if err != nil {
+		t.Fatalf("ListProjectMembers: %v", err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("expected 1 member, got %d", len(members))
+	}
+}

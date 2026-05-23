@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/paramahastha/configly/server/internal/model"
 )
@@ -9,6 +10,7 @@ import (
 type Store interface {
 	// Environments / projects
 	CreateEnvironment(ctx context.Context, env *model.Environment) error
+	DeleteEnvironment(ctx context.Context, project, name string) error
 	ListEnvironments(ctx context.Context, project string) ([]model.Environment, error)
 	ListProjects(ctx context.Context) ([]string, error)
 
@@ -27,13 +29,17 @@ type Store interface {
 
 	// Users
 	CreateUser(ctx context.Context, u *model.User) error
+	DeleteUser(ctx context.Context, id string) error
 	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
 	ListUsers(ctx context.Context) ([]model.User, error)
 
 	// API Keys
 	CreateAPIKey(ctx context.Context, k *model.APIKey, actor string) error
+	RevokeAPIKey(ctx context.Context, id string) error
+	// UpdateLastUsedAt records when the key was last used for authentication.
+	UpdateLastUsedAt(ctx context.Context, keyID string, t time.Time) error
 	// GetUserByAPIKey hashes rawKey with SHA-256 and looks up the matching api_key row,
-	// then loads the associated user. Returns both so the caller can update LastUsedAt.
+	// then loads the associated user. Returns both so the caller can call UpdateLastUsedAt.
 	GetUserByAPIKey(ctx context.Context, rawKey string) (*model.User, *model.APIKey, error)
 
 	// RBAC — roles are scoped per project via ProjectMember
