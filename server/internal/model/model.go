@@ -47,6 +47,8 @@ type Config struct {
 	Rules       json.RawMessage `json:"rules,omitempty"`
 	Description string          `json:"description,omitempty"`
 	Version     int             `json:"version"`
+	CreatedAt   time.Time       `json:"created_at"`
+	CreatedBy   string          `json:"created_by"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 	UpdatedBy   string          `json:"updated_by"`
 	DeletedAt   *time.Time      `json:"deleted_at,omitempty"`
@@ -70,10 +72,11 @@ type ConfigVersion struct {
 }
 
 type User struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string     `json:"id"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"-"`
+	CreatedAt    time.Time  `json:"created_at"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 }
 
 // ProjectMember records a user's role within a specific project.
@@ -83,6 +86,7 @@ type ProjectMember struct {
 	Project   string    `json:"project"`
 	Role      Role      `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // APIKey belongs to a user and can be rotated or revoked independently.
@@ -99,15 +103,15 @@ type APIKey struct {
 }
 
 type AuditEvent struct {
-	ID        string    `json:"id"`
-	Actor     string    `json:"actor"`
-	Action    string    `json:"action"`
-	Resource  string    `json:"resource"`
-	Project   string    `json:"project"`
-	Env       string    `json:"env"`
-	Before    string    `json:"before,omitempty"`
-	After     string    `json:"after,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string          `json:"id"`
+	Actor       string          `json:"actor"`
+	Action      string          `json:"action"`
+	Resource    string          `json:"resource"`
+	Project     string          `json:"project"`
+	Environment string          `json:"environment"`
+	Before      json.RawMessage `json:"before,omitempty"`
+	After       json.RawMessage `json:"after,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
 // ConfigEntry is the SDK-facing projection of a config.
