@@ -601,10 +601,12 @@ func (s *SQLite) AppendAudit(ctx context.Context, e *model.AuditEvent) error {
 		e.ID = uuid.NewString()
 	}
 	e.CreatedAt = time.Now().UTC()
+	before := nullableJSON(e.Before)
+	after := nullableJSON(e.After)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO audit(id, actor, action, resource, project, environment, before, after, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.Actor, e.Action, e.Resource, e.Project, e.Environment, e.Before, e.After, e.CreatedAt)
+		e.ID, e.Actor, e.Action, e.Resource, e.Project, e.Environment, before, after, e.CreatedAt)
 	return err
 }
 
@@ -620,9 +622,16 @@ func (s *SQLite) ListAudit(ctx context.Context, project string, limit int) ([]mo
 	var out []model.AuditEvent
 	for rows.Next() {
 		var e model.AuditEvent
+		var before, after sql.NullString
 		if err := rows.Scan(&e.ID, &e.Actor, &e.Action, &e.Resource,
-			&e.Project, &e.Environment, &e.Before, &e.After, &e.CreatedAt); err != nil {
+			&e.Project, &e.Environment, &before, &after, &e.CreatedAt); err != nil {
 			return nil, err
+		}
+		if before.Valid && before.String != "" {
+			e.Before = []byte(before.String)
+		}
+		if after.Valid && after.String != "" {
+			e.After = []byte(after.String)
 		}
 		out = append(out, e)
 	}
@@ -636,6 +645,13 @@ func (s *SQLite) ListAudit(ctx context.Context, project string, limit int) ([]mo
 func nullableRules(r []byte) interface{} {
 	if len(r) == 0 {
 		return nil
+	}
+	return string(r)
+}
+
+func nullableJSON(r []byte) string {
+	if len(r) == 0 {
+		return ""
 	}
 	return string(r)
 }
