@@ -1,0 +1,15 @@
+name: PR Briefing
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: paramahastha/pr-context-engine@main
+        with:
+          groq-api-key: ${{ secrets.GEMINI_API_KEY }}
+          enable-fixes: 'true'
