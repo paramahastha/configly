@@ -1,6 +1,9 @@
 # Claude Code local config
 .claude/
 
+# Dependencies
+node_modules/
+
 # Build artifacts
 bin/
 dist/
