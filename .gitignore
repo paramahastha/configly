@@ -1,0 +1,18 @@
+# Claude Code local config
+.claude/
+
+# Build artifacts
+bin/
+dist/
+
+# Go test cache
+*.test
+*.out
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# OS artifacts
+.DS_Store

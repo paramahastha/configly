@@ -518,10 +518,23 @@ func (s *SQLite) CreateUser(ctx context.Context, u *model.User) error {
 }
 
 func (s *SQLite) DeleteUser(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET deleted_at=? WHERE id=? AND deleted_at IS NULL`,
-		time.Now().UTC(), id)
-	return err
+	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE users SET deleted_at=? WHERE id=? AND deleted_at IS NULL`, now, id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM api_keys WHERE user_id=?`, id); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM project_members WHERE user_id=?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLite) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {

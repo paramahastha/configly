@@ -440,7 +440,7 @@ func TestCreateAndGetUser(t *testing.T) {
 }
 
 // TestDeleteUser: soft-deleted user is invisible to GetUserByEmail, ListUsers,
-// and GetUserByAPIKey.
+// and GetUserByAPIKey; cascades to api_keys and project_members.
 func TestDeleteUser(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -449,20 +449,35 @@ func TestDeleteUser(t *testing.T) {
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
+
+	rawKey := "deleteduserkey1"
+	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8], KeyHash: store.HashAPIKey(rawKey)}
+	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if err := s.SetProjectMember(ctx, &model.ProjectMember{UserID: u.ID, Project: "p", Role: model.RoleViewer}); err != nil {
+		t.Fatalf("SetProjectMember: %v", err)
+	}
+
 	if err := s.DeleteUser(ctx, u.ID); err != nil {
 		t.Fatalf("DeleteUser: %v", err)
 	}
 
-	got, _ := s.GetUserByEmail(ctx, "bob@example.com")
-	if got != nil {
+	if got, _ := s.GetUserByEmail(ctx, "bob@example.com"); got != nil {
 		t.Fatal("deleted user must not be returned by GetUserByEmail")
 	}
-
 	users, _ := s.ListUsers(ctx)
 	for _, lu := range users {
 		if lu.ID == u.ID {
 			t.Fatal("deleted user must not appear in ListUsers")
 		}
+	}
+	// API key and project membership must be gone.
+	if u2, _, _ := s.GetUserByAPIKey(ctx, rawKey); u2 != nil {
+		t.Fatal("deleted user's API key must not authenticate")
+	}
+	if members, _ := s.ListProjectMembers(ctx, "p"); len(members) != 0 {
+		t.Fatalf("deleted user's project_members must be removed, got %d", len(members))
 	}
 }
 
