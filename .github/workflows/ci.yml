@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+jobs:
+  server:
+    name: Server (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: Install SQLite deps
+        run: sudo apt-get install -y gcc libsqlite3-dev
+      - name: Vet
+        run: cd server && go vet ./...
+      - name: Test
+        run: cd server && CGO_ENABLED=1 go test -race ./...
+      - name: Build
+        run: cd server && CGO_ENABLED=1 go build -o /tmp/configly ./cmd/configly
+
+  sdk-go:
+    name: Go SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Vet
+        run: cd sdk/go && go vet ./...
+      - name: Test
+        run: cd sdk/go && go test -race ./...
+
+  sdk-js:
+    name: JS/TS SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sdk/js/package-lock.json
+      - name: Install
+        run: cd sdk/js && npm install
+      - name: Typecheck
+        run: cd sdk/js && npx tsc --noEmit
+      - name: Test
+        run: cd sdk/js && npm test

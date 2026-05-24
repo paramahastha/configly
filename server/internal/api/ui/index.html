@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configly</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #0e0f12;
+      --panel:  #15171c;
+      --panel2: #1c1f26;
+      --border: #262a33;
+      --text:   #e6e8ec;
+      --muted:  #8a8f99;
+      --accent: #7cf0a8;
+      --warn:   #f0c47c;
+      --danger: #f07c7c;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+    /* ── Header ── */
+    .hdr {
+      display: flex; align-items: center; gap: 10px;
+      height: 52px; padding: 0 20px;
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .logo { font-family: 'Fraunces', serif; font-size: 20px; color: var(--accent); letter-spacing: -.5px; margin-right: 4px; flex-shrink: 0; }
+    .spacer { flex: 1; }
+    .status-wrap { display: flex; align-items: center; gap: 7px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .dot.live { background: var(--accent); animation: blink 2s infinite; }
+    .dot.err  { background: var(--danger); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    #stxt { font-size: 11px; color: var(--muted); }
+    #stxt.live { color: var(--accent); }
+    #stxt.err  { color: var(--danger); }
+
+    /* ── Form controls ── */
+    select, input[type=text], input[type=password], textarea {
+      background: var(--panel2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 5px 10px; font-family: inherit; font-size: 12px;
+      outline: none;
+    }
+    select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+    select { cursor: pointer; }
+    input[list] { width: 130px; }
+
+    /* ── Buttons ── */
+    .btn { border: none; border-radius: 4px; padding: 6px 13px; font-family: inherit; font-size: 12px; cursor: pointer; }
+    .btn-p  { background: var(--accent); color: #0e0f12; font-weight: 500; }
+    .btn-p:hover { opacity: .88; }
+    .btn-g  { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-g:hover { color: var(--text); }
+    .btn-icon { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 4px 7px; border-radius: 4px; }
+    .btn-icon:hover { color: var(--text); background: var(--panel2); }
+
+    /* ── Table ── */
+    .tw { padding: 16px 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+      padding: 6px 12px; border-bottom: 1px solid var(--border);
+    }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: var(--panel2); }
+    .kc { font-weight: 500; }
+    .vc { color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+
+    /* ── Type badges ── */
+    .badge { display: inline-block; border-radius: 3px; padding: 1px 6px; font-size: 10px; font-weight: 500; }
+    .b-string              { background: #262a33; color: #8a8f99; }
+    .b-int, .b-float       { background: #19263d; color: #7ca9f0; }
+    .b-bool                { background: #2a2015; color: #f0c47c; }
+    .b-json                { background: #221b2e; color: #c47cf0; }
+    .b-flag                { background: #0d2318; color: #7cf0a8; }
+
+    /* ── Rollout bar ── */
+    .rl { display: flex; align-items: center; gap: 6px; }
+    .rl-t { width: 48px; height: 3px; background: var(--border); border-radius: 2px; flex-shrink: 0; }
+    .rl-f { height: 100%; background: var(--accent); border-radius: 2px; }
+    .rl-n { font-size: 11px; color: var(--muted); }
+
+    /* ── Action buttons ── */
+    .act { background: none; border: none; cursor: pointer; padding: 3px 6px; border-radius: 3px; color: var(--muted); font-size: 14px; }
+    .act:hover { color: var(--text); background: var(--panel2); }
+    .act.d:hover { color: var(--danger); }
+
+    /* ── Empty states ── */
+    .empty { padding: 80px 24px; text-align: center; color: var(--muted); }
+    .empty .ico { font-size: 38px; margin-bottom: 12px; }
+    .empty p { font-size: 12px; line-height: 1.9; }
+    .empty strong { color: var(--text); }
+
+    /* ── Modal overlay ── */
+    .ov {
+      position: fixed; inset: 0; background: rgba(0,0,0,.65);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 24px; width: 460px; max-width: 95vw;
+    }
+    .modal h2 { font-family: 'Fraunces', serif; font-size: 17px; margin-bottom: 20px; }
+    .fg { margin-bottom: 14px; }
+    .fg label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px; }
+    .fg input[type=text], .fg input[type=password], .fg select, .fg textarea { width: 100%; }
+    .fg textarea { resize: vertical; min-height: 70px; }
+    .mf { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+    .hidden { display: none !important; }
+
+    /* ── Toasts ── */
+    #toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 200; pointer-events: none; }
+    .toast { background: var(--panel); border: 1px solid var(--border); border-left-width: 3px; border-radius: 5px; padding: 10px 16px; font-size: 12px; min-width: 220px; animation: ti .2s ease; }
+    .toast.ok   { border-left-color: var(--accent); }
+    .toast.err  { border-left-color: var(--danger); }
+    .toast.warn { border-left-color: var(--warn); }
+    @keyframes ti { from{transform:translateX(16px);opacity:0} to{transform:translateX(0);opacity:1} }
+  </style>
+</head>
+<body>
+
+<header class="hdr">
+  <span class="logo">configly</span>
+
+  <input id="proj-in" list="proj-list" placeholder="project" onchange="onProjChange()" title="Project">
+  <datalist id="proj-list"></datalist>
+
+  <input id="env-in" list="env-list" placeholder="environment" onchange="onEnvChange()" title="Environment">
+  <datalist id="env-list"></datalist>
+
+  <button class="btn btn-p" onclick="openCfgModal(null)">+ New Config</button>
+
+  <span class="spacer"></span>
+
+  <div class="status-wrap">
+    <span id="sdot" class="dot"></span>
+    <span id="stxt">—</span>
+  </div>
+  <button class="btn-icon" onclick="openSetup()" title="Connection settings">⚙</button>
+</header>
+
+<main id="main">
+  <div class="empty">
+    <div class="ico">⚙</div>
+    <p>Click <strong>⚙</strong> to enter your API key,<br>then type a project and environment above.</p>
+  </div>
+</main>
+
+<!-- Setup modal -->
+<div id="setup-modal" class="ov hidden">
+  <div class="modal">
+    <h2>Connection</h2>
+    <div class="fg">
+      <label for="s-url">Server URL</label>
+      <input type="text" id="s-url" placeholder="http://localhost:8080">
+    </div>
+    <div class="fg">
+      <label for="s-key">API Key</label>
+      <input type="password" id="s-key" placeholder="cfly_...">
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeSetup()">Cancel</button>
+      <button class="btn btn-p" onclick="saveSetup()">Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- Config modal (create / edit) -->
+<div id="cfg-modal" class="ov hidden">
+  <div class="modal">
+    <h2 id="cfg-title">New Config</h2>
+    <div class="fg">
+      <label for="c-key">Key</label>
+      <input type="text" id="c-key" placeholder="feature.my_flag">
+    </div>
+    <div class="fg">
+      <label for="c-type">Type</label>
+      <select id="c-type" onchange="onTypeCh()">
+        <option value="string">string</option>
+        <option value="int">int</option>
+        <option value="float">float</option>
+        <option value="bool">bool</option>
+        <option value="json">json</option>
+        <option value="flag">flag</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label for="c-val">Value</label>
+      <input type="text" id="c-val" placeholder="hello world">
+    </div>
+    <div class="fg hidden" id="rg">
+      <label for="c-rollout">Rollout &nbsp;<span id="rp" style="color:var(--accent)">0%</span></label>
+      <input type="range" id="c-rollout" min="0" max="100" value="0"
+        oninput="document.getElementById('rp').textContent=this.value+'%'"
+        style="width:100%;accent-color:var(--accent);margin-top:4px">
+    </div>
+    <div class="fg">
+      <label for="c-desc">Description <span style="opacity:.5">(optional)</span></label>
+      <input type="text" id="c-desc" placeholder="What is this config for?">
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="closeCfgModal()">Cancel</button>
+      <button class="btn btn-p" onclick="submitCfg()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  url:      localStorage.getItem('configly_url') || location.origin,
+  key:      localStorage.getItem('configly_key') || '',
+  proj:     localStorage.getItem('configly_project') || '',
+  env:      localStorage.getItem('configly_env') || '',
+  projects: [],
+  envs:     [],
+  configs:  [],
+  etag:     '',
+  polling:  false,
+  ctrl:     null,
+};
+
+function persist() {
+  localStorage.setItem('configly_url',     S.url);
+  localStorage.setItem('configly_key',     S.key);
+  localStorage.setItem('configly_project', S.proj);
+  localStorage.setItem('configly_env',     S.env);
+}
+
+// ── API helper ─────────────────────────────────────────────────────────────
+async function req(method, path, body, signal) {
+  const opts = {
+    method,
+    headers: { Authorization: 'Bearer ' + S.key },
+    signal,
+  };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(S.url + path, opts);
+}
+
+// ── Data ───────────────────────────────────────────────────────────────────
+async function loadProjects() {
+  const r = await req('GET', '/v1/projects').catch(() => null);
+  if (!r?.ok) return false;
+  S.projects = await r.json();
+  const dl = document.getElementById('proj-list');
+  dl.innerHTML = S.projects.map(p => `<option value="${esc(p)}">`).join('');
+  return true;
+}
+
+async function loadEnvs() {
+  if (!S.proj) return;
+  const r = await req('GET', '/v1/projects/' + enc(S.proj) + '/environments').catch(() => null);
+  if (!r?.ok) return;
+  S.envs = await r.json();
+  const dl = document.getElementById('env-list');
+  dl.innerHTML = S.envs.map(e => `<option value="${esc(e.name)}">`).join('');
+  if (!S.envs.find(e => e.name === S.env) && S.envs.length) {
+    S.env = S.envs[0].name;
+    document.getElementById('env-in').value = S.env;
+    persist();
+  }
+}
+
+async function loadConfigs() {
+  if (!S.proj || !S.env) return;
+  const r = await req('GET', '/v1/configs/' + enc(S.proj) + '/' + enc(S.env)).catch(() => null);
+  if (!r?.ok) { toast('Failed to load configs', 'warn'); return; }
+  S.configs = await r.json();
+  renderTable();
+}
+
+// ── Long-poll loop ─────────────────────────────────────────────────────────
+function startPoll() {
+  stopPoll();
+  S.polling = true;
+  _bo = 1000;
+  _loop();
+}
+
+function stopPoll() {
+  S.polling = false;
+  S.ctrl?.abort();
+  S.ctrl = null;
+}
+
+let _bo = 1000;
+
+async function _loop() {
+  while (S.polling && S.proj && S.env) {
+    S.ctrl = new AbortController();
+    try {
+      const h = { Authorization: 'Bearer ' + S.key };
+      if (S.etag) h['If-None-Match'] = S.etag;
+      const signal = AbortSignal.any
+        ? AbortSignal.any([S.ctrl.signal, AbortSignal.timeout(35_000)])
+        : S.ctrl.signal;
+      const r = await fetch(
+        S.url + '/v1/snapshot/' + enc(S.proj) + '/' + enc(S.env) + '?wait=30',
+        { headers: h, signal }
+      );
+      setConn(true);
+      _bo = 1000;
+      if (r.status === 200) {
+        const d = await r.json();
+        S.etag = r.headers.get('ETag') || d.etag || '';
+        await loadConfigs();
+      }
+      // 304 → no change, loop immediately
+    } catch (e) {
+      if (!S.polling || e.name === 'AbortError') return;
+      setConn(false);
+      await sleep(_bo);
+      _bo = Math.min(_bo * 2, 30000);
+    }
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Connection indicator ───────────────────────────────────────────────────
+function setConn(ok) {
+  document.getElementById('sdot').className = 'dot ' + (ok ? 'live' : 'err');
+  const t = document.getElementById('stxt');
+  t.textContent = ok ? 'live' : 'reconnecting...';
+  t.className = ok ? 'live' : 'err';
+}
+
+// ── Render table ───────────────────────────────────────────────────────────
+function renderTable() {
+  const wrap = document.getElementById('main');
+  if (!S.configs.length) {
+    wrap.innerHTML = `<div class="empty">
+      <div class="ico">⚡</div>
+      <p>No configs in <strong>${esc(S.proj)}/${esc(S.env)}</strong>.<br>
+      Click <strong>+ New Config</strong> to add one.</p>
+    </div>`;
+    return;
+  }
+
+  const rows = S.configs.map((c, i) => `<tr>
+    <td><span class="kc">${esc(c.key)}</span></td>
+    <td><span class="badge b-${esc(c.type)}">${esc(c.type)}</span></td>
+    <td><span class="vc" title="${esc(c.value)}">${esc(trunc(c.value, 55))}</span></td>
+    <td>${c.type === 'flag'
+      ? `<div class="rl"><div class="rl-t"><div class="rl-f" style="width:${parseInt(c.rollout,10)}%"></div></div><span class="rl-n">${parseInt(c.rollout,10)}%</span></div>`
+      : `<span style="color:var(--muted)">—</span>`
+    }</td>
+    <td style="color:var(--muted);font-size:12px">${esc(c.version)}</td>
+    <td style="color:var(--muted);font-size:11px">${relt(c.updated_at)}</td>
+    <td style="white-space:nowrap">
+      <button class="act"   data-i="${i}" data-a="e" title="Edit">✎</button>
+      <button class="act d" data-i="${i}" data-a="d" title="Delete">✕</button>
+    </td>
+  </tr>`).join('');
+
+  wrap.innerHTML = `<div class="tw"><table>
+    <thead><tr>
+      <th>Key</th><th>Type</th><th>Value</th>
+      <th>Rollout</th><th>Ver</th><th>Updated</th><th></th>
+    </tr></thead>
+    <tbody id="tbody">${rows}</tbody>
+  </table></div>`;
+
+  document.getElementById('tbody').addEventListener('click', e => {
+    const b = e.target.closest('[data-a]');
+    if (!b) return;
+    const c = S.configs[+b.dataset.i];
+    if (b.dataset.a === 'e') openCfgModal(c);
+    else doDelete(c);
+  });
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function trunc(s, n) { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }
+function enc(s)  { return encodeURIComponent(s); }
+function relt(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (d < 60)    return 'just now';
+  if (d < 3600)  return Math.floor(d / 60)   + 'm ago';
+  if (d < 86400) return Math.floor(d / 3600)  + 'h ago';
+  return Math.floor(d / 86400) + 'd ago';
+}
+
+// ── Toasts ─────────────────────────────────────────────────────────────────
+function toast(msg, type = 'ok') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ── Setup modal ────────────────────────────────────────────────────────────
+function openSetup() {
+  document.getElementById('s-url').value = S.url;
+  document.getElementById('s-key').value = S.key;
+  document.getElementById('setup-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById(S.key ? 's-key' : 's-url').focus(), 50);
+}
+function closeSetup() { document.getElementById('setup-modal').classList.add('hidden'); }
+async function saveSetup() {
+  const url = document.getElementById('s-url').value.trim().replace(/\/+$/, '');
+  const key = document.getElementById('s-key').value.trim();
+  if (!url || !key) { toast('URL and API key are required', 'err'); return; }
+  S.url = url;
+  S.key = key;
+  persist();
+  closeSetup();
+  await boot();
+}
+
+// ── Config modal ───────────────────────────────────────────────────────────
+function openCfgModal(c) {
+  document.getElementById('cfg-title').textContent = c ? 'Edit Config' : 'New Config';
+  document.getElementById('c-key').value    = c?.key         ?? '';
+  document.getElementById('c-key').disabled = !!c;
+  document.getElementById('c-type').value   = c?.type        ?? 'string';
+  document.getElementById('c-val').value    = c?.value       ?? '';
+  document.getElementById('c-rollout').value = c?.rollout    ?? 0;
+  document.getElementById('rp').textContent  = (c?.rollout   ?? 0) + '%';
+  document.getElementById('c-desc').value   = c?.description ?? '';
+  onTypeCh();
+  document.getElementById('cfg-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById(c ? 'c-val' : 'c-key').focus(), 50);
+}
+function closeCfgModal() { document.getElementById('cfg-modal').classList.add('hidden'); }
+
+function onTypeCh() {
+  const t = document.getElementById('c-type').value;
+  document.getElementById('rg').classList[t === 'flag' ? 'remove' : 'add']('hidden');
+  const ph = { string: 'hello world', int: '42', float: '3.14', bool: 'true', json: '{"enabled":true}', flag: 'true' };
+  document.getElementById('c-val').placeholder = ph[t] ?? '';
+}
+
+async function submitCfg() {
+  const key  = document.getElementById('c-key').value.trim();
+  const type = document.getElementById('c-type').value;
+  const value = document.getElementById('c-val').value;
+  const rollout = parseInt(document.getElementById('c-rollout').value, 10) || 0;
+  const description = document.getElementById('c-desc').value.trim();
+  if (!key) { toast('Key is required', 'err'); return; }
+  const r = await req('PUT', '/v1/configs/' + enc(S.proj) + '/' + enc(S.env),
+    { key, type, value, rollout, description }
+  ).catch(() => null);
+  if (!r?.ok) {
+    const e = await r?.json().catch(() => ({}));
+    toast(e?.error || 'Save failed', 'err');
+    return;
+  }
+  closeCfgModal();
+  toast('Config saved');
+  await loadConfigs();
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────────
+async function doDelete(c) {
+  if (!confirm(`Delete "${c.key}"?`)) return;
+  const r = await req('DELETE', '/v1/configs/' + enc(S.proj) + '/' + enc(S.env) + '/' + enc(c.key)).catch(() => null);
+  if (!r?.ok) { toast('Delete failed', 'err'); return; }
+  toast('Config deleted');
+  await loadConfigs();
+}
+
+// ── Header events ──────────────────────────────────────────────────────────
+async function onProjChange() {
+  const v = document.getElementById('proj-in').value.trim();
+  if (!v || v === S.proj) return;
+  S.proj = v;
+  S.env  = '';
+  S.etag = '';
+  persist();
+  stopPoll();
+  document.getElementById('env-in').value = '';
+  document.getElementById('env-list').innerHTML = '';
+  await loadEnvs();
+  if (S.env && S.proj) { await loadConfigs(); startPoll(); }
+}
+
+async function onEnvChange() {
+  const v = document.getElementById('env-in').value.trim();
+  if (!v || v === S.env) return;
+  S.env  = v;
+  S.etag = '';
+  persist();
+  stopPoll();
+  if (S.proj && S.env) { await loadConfigs(); startPoll(); }
+}
+
+// ── Keyboard ───────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSetup(); closeCfgModal(); }
+});
+
+// ── Setup-modal Enter key ──────────────────────────────────────────────────
+document.getElementById('setup-modal').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveSetup();
+});
+document.getElementById('cfg-modal').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') submitCfg();
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+async function boot() {
+  if (!S.key) { openSetup(); return; }
+
+  // Populate project suggestions (requires admin; non-fatal if it fails)
+  await loadProjects();
+
+  // Restore header inputs from saved state
+  if (S.proj) document.getElementById('proj-in').value = S.proj;
+  if (S.env)  document.getElementById('env-in').value  = S.env;
+
+  // If we have a saved project, try to load its envs for the datalist
+  if (S.proj) await loadEnvs();
+
+  // If we have both a project and env, load configs and start polling
+  if (S.proj && S.env) {
+    await loadConfigs();
+    startPoll();
+  } else if (!S.proj) {
+    // Auto-select first project if we got the list
+    if (S.projects.length) {
+      S.proj = S.projects[0];
+      document.getElementById('proj-in').value = S.proj;
+      persist();
+      await loadEnvs();
+      if (S.env) {
+        await loadConfigs();
+        startPoll();
+      }
+    }
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

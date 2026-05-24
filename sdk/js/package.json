@@ -1,0 +1,46 @@
+{
+  "name": "@configly/sdk",
+  "version": "0.1.0",
+  "description": "Browser + Node SDK for the Configly config & feature flag platform",
+  "license": "MIT",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --minify",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paramahastha/configly.git",
+    "directory": "sdk/js"
+  },
+  "bugs": {
+    "url": "https://github.com/paramahastha/configly/issues"
+  },
+  "homepage": "https://github.com/paramahastha/configly#readme",
+  "keywords": [
+    "feature-flags",
+    "configuration",
+    "runtime-config",
+    "self-hosted"
+  ],
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}
