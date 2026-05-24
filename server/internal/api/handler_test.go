@@ -86,12 +86,11 @@ func mustCreateUser(t *testing.T, ctx context.Context, st store.Store, email str
 		t.Fatal(err)
 	}
 	k := &model.APIKey{
-		UserID:  u.ID,
-		Name:    "default",
-		Prefix:  rawKey[:8],
-		KeyHash: store.HashAPIKey(rawKey),
+		UserID: u.ID,
+		Name:   "default",
+		Prefix: rawKey[:8],
 	}
-	if err := st.CreateAPIKey(ctx, k, "system"); err != nil {
+	if err := st.CreateAPIKey(ctx, k, rawKey, "system"); err != nil {
 		t.Fatalf("create api key for %s: %v", email, err)
 	}
 	return rawKey

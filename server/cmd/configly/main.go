@@ -47,8 +47,9 @@ func run() error {
 	srv := &http.Server{
 		Handler:           h.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		// WriteTimeout is intentionally absent: SSE connections (/v1/stream) are long-lived
+		// and would be forcibly closed by a server-level write deadline.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	// Bind before logging so "listening on" is only printed on success.
@@ -94,6 +95,9 @@ func bootstrap(ctx context.Context, st store.Store) error {
 	if len(users) == 0 {
 		adminEmail := envOr("CONFIGLY_ADMIN_EMAIL", "admin@configly.local")
 		adminPW := envOr("CONFIGLY_ADMIN_PASSWORD", "changeme")
+		if adminPW == "changeme" {
+			log.Println("WARNING: CONFIGLY_ADMIN_PASSWORD is not set. Change the default password before deploying.")
+		}
 
 		hash, err := auth.HashPassword(adminPW)
 		if err != nil {
@@ -111,12 +115,11 @@ func bootstrap(ctx context.Context, st store.Store) error {
 		}
 
 		k := &model.APIKey{
-			UserID:  u.ID,
-			Name:    "bootstrap",
-			Prefix:  rawKey[:8],
-			KeyHash: store.HashAPIKey(rawKey),
+			UserID: u.ID,
+			Name:   "bootstrap",
+			Prefix: rawKey[:8],
 		}
-		if err := st.CreateAPIKey(ctx, k, "system"); err != nil {
+		if err := st.CreateAPIKey(ctx, k, rawKey, "system"); err != nil {
 			return fmt.Errorf("create api key: %w", err)
 		}
 

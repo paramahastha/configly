@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -18,6 +19,8 @@ import (
 	"github.com/paramahastha/configly/server/internal/sse"
 	"github.com/paramahastha/configly/server/internal/store"
 )
+
+const maxQueryLimit = 1000
 
 //go:embed ui/*
 var uiFS embed.FS
@@ -62,6 +65,9 @@ func (h *Handler) Routes() http.Handler {
 			r.Post("/v1/environments", h.createEnvironment)
 			r.Get("/v1/projects", h.listProjects)
 			r.Get("/v1/projects/{project}/environments", h.listEnvironments)
+			r.Get("/v1/projects/{project}/members", h.listProjectMembers)
+			r.Post("/v1/projects/{project}/members", h.setProjectMember)
+			r.Delete("/v1/projects/{project}/members/{userID}", h.removeProjectMember)
 			r.Post("/v1/users", h.createUser)
 			r.Get("/v1/users", h.listUsers)
 			r.Get("/v1/audit", h.listAudit)
@@ -241,6 +247,7 @@ func (h *Handler) upsertConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.publishChange(r.Context(), project, env)
+	h.appendAudit(r.Context(), user.Email, "config.upsert", c.Key, project, env)
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -251,11 +258,16 @@ func (h *Handler) deleteConfig(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFrom(r.Context())
 
 	if err := h.Store.DeleteConfig(r.Context(), project, env, key, user.Email); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "config not found")
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	h.publishChange(r.Context(), project, env)
+	h.appendAudit(r.Context(), user.Email, "config.delete", key, project, env)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -264,6 +276,9 @@ func (h *Handler) listVersions(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if l, _ := strconv.Atoi(r.URL.Query().Get("limit")); l > 0 {
 		limit = l
+	}
+	if limit > maxQueryLimit {
+		limit = maxQueryLimit
 	}
 
 	versions, err := h.Store.ListVersions(r.Context(), id, limit)
@@ -286,10 +301,14 @@ func (h *Handler) rollbackConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.UserFrom(r.Context())
 
-	if err := h.Store.Rollback(r.Context(), id, version, user.Email); err != nil {
+	project, env, err := h.Store.Rollback(r.Context(), id, version, user.Email)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	h.publishChange(r.Context(), project, env)
+	h.appendAudit(r.Context(), user.Email, "config.rollback", id, project, env)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -318,6 +337,7 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.appendAudit(r.Context(), auth.UserFrom(r.Context()).Email, "environment.create", req.Project+"/"+req.Name, req.Project, "")
 	writeJSON(w, http.StatusCreated, env)
 }
 
@@ -396,16 +416,16 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		keyName = "default"
 	}
 	k := &model.APIKey{
-		UserID:  u.ID,
-		Name:    keyName,
-		Prefix:  rawKey[:8],
-		KeyHash: store.HashAPIKey(rawKey),
+		UserID: u.ID,
+		Name:   keyName,
+		Prefix: rawKey[:8],
 	}
-	if err := h.Store.CreateAPIKey(r.Context(), k, caller.Email); err != nil {
+	if err := h.Store.CreateAPIKey(r.Context(), k, rawKey, caller.Email); err != nil {
 		writeErr(w, http.StatusInternalServerError, "create api key: "+err.Error())
 		return
 	}
 
+	h.appendAudit(r.Context(), caller.Email, "user.create", u.Email, "", "")
 	writeJSON(w, http.StatusCreated, createUserResp{User: *u, APIKey: rawKey})
 }
 
@@ -427,6 +447,9 @@ func (h *Handler) listAudit(w http.ResponseWriter, r *http.Request) {
 	if l, _ := strconv.Atoi(r.URL.Query().Get("limit")); l > 0 {
 		limit = l
 	}
+	if limit > maxQueryLimit {
+		limit = maxQueryLimit
+	}
 
 	events, err := h.Store.ListAudit(r.Context(), project, limit)
 	if err != nil {
@@ -439,9 +462,79 @@ func (h *Handler) listAudit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, events)
 }
 
+func (h *Handler) listProjectMembers(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	members, err := h.Store.ListProjectMembers(r.Context(), project)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if members == nil {
+		members = []model.ProjectMember{}
+	}
+	writeJSON(w, http.StatusOK, members)
+}
+
+type setMemberBody struct {
+	UserID string     `json:"user_id"`
+	Role   model.Role `json:"role"`
+}
+
+func (h *Handler) setProjectMember(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	var req setMemberBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.UserID == "" {
+		writeErr(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+	m := &model.ProjectMember{UserID: req.UserID, Project: project, Role: req.Role}
+	if err := h.Store.SetProjectMember(r.Context(), m); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	caller := auth.UserFrom(r.Context())
+	h.appendAudit(r.Context(), caller.Email, "member.set", req.UserID, project, "")
+	writeJSON(w, http.StatusOK, m)
+}
+
+func (h *Handler) removeProjectMember(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	userID := chi.URLParam(r, "userID")
+	if err := h.Store.RemoveProjectMember(r.Context(), userID, project); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "member not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	caller := auth.UserFrom(r.Context())
+	h.appendAudit(r.Context(), caller.Email, "member.remove", userID, project, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// appendAudit records a mutation event in the background so it never blocks the response path.
+func (h *Handler) appendAudit(ctx context.Context, actor, action, resource, project, env string) {
+	go func() {
+		bctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = h.Store.AppendAudit(bctx, &model.AuditEvent{
+			Actor:       actor,
+			Action:      action,
+			Resource:    resource,
+			Project:     project,
+			Environment: env,
+		})
+	}()
+}
 
 // publishChange fetches the current snapshot (already rebuilt by the store)
 // and broadcasts a change event so long-poll and SSE subscribers wake up.

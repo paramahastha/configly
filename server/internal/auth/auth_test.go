@@ -42,12 +42,11 @@ func seedUser(t *testing.T, s *store.SQLite, email string, role model.Role) (use
 		t.Fatalf("NewAPIKey: %v", err)
 	}
 	k := &model.APIKey{
-		UserID:  u.ID,
-		Name:    "test",
-		Prefix:  rawKey[:8],
-		KeyHash: store.HashAPIKey(rawKey),
+		UserID: u.ID,
+		Name:   "test",
+		Prefix: rawKey[:8],
 	}
-	if err := s.CreateAPIKey(context.Background(), k, u.Email); err != nil {
+	if err := s.CreateAPIKey(context.Background(), k, rawKey, u.Email); err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 	return u, rawKey

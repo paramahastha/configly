@@ -127,7 +127,7 @@ func TestRollback(t *testing.T) {
 		t.Fatalf("v2 upsert: %v", err)
 	}
 
-	if err := s.Rollback(ctx, configID, 1, "actor"); err != nil {
+	if _, _, err := s.Rollback(ctx, configID, 1, "actor"); err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
 
@@ -451,8 +451,8 @@ func TestDeleteUser(t *testing.T) {
 	}
 
 	rawKey := "deleteduserkey1"
-	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8], KeyHash: store.HashAPIKey(rawKey)}
-	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8]}
+	if err := s.CreateAPIKey(ctx, k, rawKey, u.ID); err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 	if err := s.SetProjectMember(ctx, &model.ProjectMember{UserID: u.ID, Project: "p", Role: model.RoleViewer}); err != nil {
@@ -493,12 +493,11 @@ func TestCreateAndRevokeAPIKey(t *testing.T) {
 
 	rawKey := "supersecretkey1234"
 	k := &model.APIKey{
-		UserID:  u.ID,
-		Name:    "test-key",
-		Prefix:  rawKey[:8],
-		KeyHash: store.HashAPIKey(rawKey),
+		UserID: u.ID,
+		Name:   "test-key",
+		Prefix: rawKey[:8],
 	}
-	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+	if err := s.CreateAPIKey(ctx, k, rawKey, u.ID); err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 
@@ -539,10 +538,9 @@ func TestExpiredAPIKey(t *testing.T) {
 		UserID:    u.ID,
 		Name:      "old-key",
 		Prefix:    rawKey[:8],
-		KeyHash:   store.HashAPIKey(rawKey),
 		ExpiresAt: &past,
 	}
-	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+	if err := s.CreateAPIKey(ctx, k, rawKey, u.ID); err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 
@@ -566,8 +564,8 @@ func TestUpdateLastUsedAt(t *testing.T) {
 	}
 
 	rawKey := "anotherkey5678"
-	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8], KeyHash: store.HashAPIKey(rawKey)}
-	if err := s.CreateAPIKey(ctx, k, u.ID); err != nil {
+	k := &model.APIKey{UserID: u.ID, Name: "k", Prefix: rawKey[:8]}
+	if err := s.CreateAPIKey(ctx, k, rawKey, u.ID); err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
 

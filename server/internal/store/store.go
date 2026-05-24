@@ -2,10 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/paramahastha/configly/server/internal/model"
 )
+
+// ErrNotFound is returned when a requested resource does not exist.
+var ErrNotFound = errors.New("not found")
 
 type Store interface {
 	// Environments / projects
@@ -22,7 +26,9 @@ type Store interface {
 
 	// Versions / rollback
 	ListVersions(ctx context.Context, configID string, limit int) ([]model.ConfigVersion, error)
-	Rollback(ctx context.Context, configID string, version int, actor string) error
+	// Rollback restores configID to version and returns the project and environment it belongs to
+	// so callers can publish change notifications.
+	Rollback(ctx context.Context, configID string, version int, actor string) (project, env string, err error)
 
 	// Snapshot (hot read path — in-memory cached)
 	Snapshot(ctx context.Context, project, env string) (*model.Snapshot, error)
@@ -34,7 +40,8 @@ type Store interface {
 	ListUsers(ctx context.Context) ([]model.User, error)
 
 	// API Keys
-	CreateAPIKey(ctx context.Context, k *model.APIKey, actor string) error
+	// CreateAPIKey hashes rawKey and persists only the hash; the raw key must be stored by the caller.
+	CreateAPIKey(ctx context.Context, k *model.APIKey, rawKey, actor string) error
 	RevokeAPIKey(ctx context.Context, id string) error
 	// UpdateLastUsedAt records when the key was last used for authentication.
 	UpdateLastUsedAt(ctx context.Context, keyID string, t time.Time) error
@@ -44,6 +51,7 @@ type Store interface {
 
 	// RBAC — roles are scoped per project via ProjectMember
 	SetProjectMember(ctx context.Context, m *model.ProjectMember) error
+	RemoveProjectMember(ctx context.Context, userID, project string) error
 	GetProjectMember(ctx context.Context, userID, project string) (*model.ProjectMember, error)
 	ListProjectMembers(ctx context.Context, project string) ([]model.ProjectMember, error)
 

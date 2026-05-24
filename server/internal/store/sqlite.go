@@ -329,12 +329,16 @@ func (s *SQLite) ListConfigs(ctx context.Context, project, env string) ([]model.
 
 func (s *SQLite) DeleteConfig(ctx context.Context, project, env, key, actor string) error {
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE configs SET deleted_at=?, updated_at=?, updated_by=?
 		 WHERE project=? AND environment=? AND key=? AND deleted_at IS NULL`,
 		now, now, actor, project, env, key)
 	if err != nil {
 		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
 	}
 	s.invalidate(project, env)
 	return nil
@@ -372,11 +376,11 @@ func (s *SQLite) ListVersions(ctx context.Context, configID string, limit int) (
 // Rollback restores a config to a historical version by creating a new version with
 // those values. All reads and writes happen inside a single transaction so the
 // config cannot be concurrently deleted between the lookup and the write.
-func (s *SQLite) Rollback(ctx context.Context, configID string, version int, actor string) error {
+func (s *SQLite) Rollback(ctx context.Context, configID string, version int, actor string) (project, env string, err error) {
 	now := time.Now().UTC()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -386,24 +390,24 @@ func (s *SQLite) Rollback(ctx context.Context, configID string, version int, act
 		`SELECT type, value, rollout, rules FROM config_versions WHERE config_id=? AND version=?`,
 		configID, version).Scan(&target.Type, &target.Value, &target.Rollout, &rules)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("version %d not found for config %s", version, configID)
+		return "", "", fmt.Errorf("version %d not found for config %s", version, configID)
 	}
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	if rules.Valid {
 		target.Rules = []byte(rules.String)
 	}
 
-	var project, env, key string
+	var key string
 	err = tx.QueryRowContext(ctx,
 		`SELECT project, environment, key FROM configs WHERE id=? AND deleted_at IS NULL`,
 		configID).Scan(&project, &env, &key)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("config %s not found or already deleted", configID)
+		return "", "", fmt.Errorf("config %s not found or already deleted", configID)
 	}
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	c := &model.Config{
@@ -417,13 +421,13 @@ func (s *SQLite) Rollback(ctx context.Context, configID string, version int, act
 		Rules:       target.Rules,
 	}
 	if err := s.upsertTx(ctx, tx, c, actor, now); err != nil {
-		return err
+		return "", "", err
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return "", "", err
 	}
 	s.invalidate(project, env)
-	return nil
+	return project, env, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -571,10 +575,11 @@ func (s *SQLite) ListUsers(ctx context.Context) ([]model.User, error) {
 // API Keys
 // ---------------------------------------------------------------------------
 
-func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey, actor string) error {
+func (s *SQLite) CreateAPIKey(ctx context.Context, k *model.APIKey, rawKey, actor string) error {
 	if k.ID == "" {
 		k.ID = uuid.NewString()
 	}
+	k.KeyHash = hashAPIKey(rawKey)
 	k.CreatedAt = time.Now().UTC()
 	k.CreatedBy = actor
 	_, err := s.db.ExecContext(ctx,
@@ -598,7 +603,7 @@ func (s *SQLite) UpdateLastUsedAt(ctx context.Context, keyID string, t time.Time
 // GetUserByAPIKey hashes rawKey (SHA-256 hex) and looks up the matching api_key row,
 // then loads the associated non-deleted user. Returns (nil, nil, nil) if not found.
 func (s *SQLite) GetUserByAPIKey(ctx context.Context, rawKey string) (*model.User, *model.APIKey, error) {
-	hash := HashAPIKey(rawKey)
+	hash := hashAPIKey(rawKey)
 
 	var k model.APIKey
 	var lastUsed, expires sql.NullTime
@@ -637,9 +642,8 @@ func (s *SQLite) GetUserByAPIKey(ctx context.Context, rawKey string) (*model.Use
 	return &user, &k, nil
 }
 
-// HashAPIKey returns the SHA-256 hex digest of rawKey.
-// Use this when building model.APIKey.KeyHash before calling CreateAPIKey.
-func HashAPIKey(rawKey string) string {
+// hashAPIKey returns the SHA-256 hex digest of rawKey.
+func hashAPIKey(rawKey string) string {
 	h := sha256.Sum256([]byte(rawKey))
 	return hex.EncodeToString(h[:])
 }
@@ -691,6 +695,19 @@ func (s *SQLite) ListProjectMembers(ctx context.Context, project string) ([]mode
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLite) RemoveProjectMember(ctx context.Context, userID, project string) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM project_members WHERE user_id=? AND project=?`, userID, project)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

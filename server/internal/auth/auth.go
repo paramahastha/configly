@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -61,11 +62,16 @@ func Middleware(st store.Store) func(http.Handler) http.Handler {
 				writeErr(w, http.StatusUnauthorized, "missing api key")
 				return
 			}
-			user, _, err := st.GetUserByAPIKey(r.Context(), raw)
+			user, key, err := st.GetUserByAPIKey(r.Context(), raw)
 			if err != nil || user == nil {
 				writeErr(w, http.StatusUnauthorized, "invalid api key")
 				return
 			}
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = st.UpdateLastUsedAt(ctx, key.ID, time.Now().UTC())
+			}()
 			ctx := context.WithValue(r.Context(), ctxUser, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
