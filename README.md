@@ -180,7 +180,7 @@ No environment variables are required — all have sensible defaults.
 ## Roadmap
 
 - **v0.2** — Postgres store adapter + Redis pub/sub for multi-instance HA
-- **v0.3** — Attribute-based targeting rules (`country == "US" && plan == "pro"`)
+- **v0.3** — Attribute-based targeting rules (`country == "ID" && plan == "pro"`)
 - **v0.4** — Webhook on change, Python SDK, Helm chart
 - **v1.0** — CDN-backed snapshot mode for mobile/edge scale
 
