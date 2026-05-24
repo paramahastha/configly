@@ -19,6 +19,25 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.js"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paramahastha/configly.git",
+    "directory": "sdk/js"
+  },
+  "bugs": {
+    "url": "https://github.com/paramahastha/configly/issues"
+  },
+  "homepage": "https://github.com/paramahastha/configly#readme",
+  "keywords": [
+    "feature-flags",
+    "configuration",
+    "runtime-config",
+    "self-hosted"
+  ],
   "devDependencies": {
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",

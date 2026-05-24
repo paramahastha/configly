@@ -4,6 +4,18 @@
 
 **MIT licensed · free forever · no telemetry · no SaaS dependency**
 
+[![CI](https://github.com/paramahastha/configly/actions/workflows/ci.yml/badge.svg)](https://github.com/paramahastha/configly/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/paramahastha/configly)](https://github.com/paramahastha/configly/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+---
+
+## Dashboard
+
+![Configly dashboard — dark mode, config table with type badges and live updates](docs/screenshot.png)
+
+> *Screenshot: dark-mode dashboard showing configs of mixed types, rollout bar on a feature flag, and the live-connection indicator (green dot). Replace this image with a real screenshot before tagging v0.1.0.*
+
 ---
 
 ## Architecture
@@ -56,6 +68,17 @@ git clone https://github.com/paramahastha/configly && cd configly
 docker compose up -d
 open http://localhost:8080
 ```
+
+### Pre-built binary
+
+```bash
+# Linux / macOS (replace linux-amd64 with your platform)
+curl -L https://github.com/paramahastha/configly/releases/latest/download/configly-linux-amd64.tar.gz \
+  | tar xz
+chmod +x configly && ./configly
+```
+
+Platforms: `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows-amd64`.
 
 ### Go SDK
 

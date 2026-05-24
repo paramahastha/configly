@@ -1,0 +1,106 @@
+version: 2
+
+before:
+  hooks:
+    - sh -c "cd server && go mod download"
+
+builds:
+  - id: configly
+    main: ./cmd/configly
+    dir: server
+    binary: configly
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    env:
+      - CGO_ENABLED=1
+    overrides:
+      - goos: linux
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
+          - CC=zig cc -target x86_64-linux-musl
+          - CXX=zig c++ -target x86_64-linux-musl
+        ldflags:
+          - -s -w -extldflags "-static"
+      - goos: linux
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+          - CC=zig cc -target aarch64-linux-musl
+          - CXX=zig c++ -target aarch64-linux-musl
+        ldflags:
+          - -s -w -extldflags "-static"
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
+          - CC=zig cc -target x86_64-macos
+          - CXX=zig c++ -target x86_64-macos
+        ldflags:
+          - -s -w
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+          - CC=zig cc -target aarch64-macos
+          - CXX=zig c++ -target aarch64-macos
+        ldflags:
+          - -s -w
+      - goos: windows
+        goarch: amd64
+        env:
+          - CGO_ENABLED=1
+          - CC=zig cc -target x86_64-windows-gnu
+          - CXX=zig c++ -target x86_64-windows-gnu
+        ldflags:
+          - -s -w
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # configly-linux-amd64.tar.gz  →  matches the curl path in docs
+    name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: paramahastha
+    name: configly
+  name_template: "v{{ .Version }}"
+  header: |
+    ## Configly v{{ .Version }}
+
+    See [CHANGELOG.md](https://github.com/paramahastha/configly/blob/main/CHANGELOG.md) for full release notes.
+  footer: |
+    **Docker:**
+    ```bash
+    docker run -d -p 8080:8080 -v configly-data:/data ghcr.io/paramahastha/configly:{{ .Tag }}
+    ```
