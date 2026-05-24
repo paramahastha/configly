@@ -87,13 +87,16 @@ func RequireRole(st store.Store, min model.Role) func(http.Handler) http.Handler
 
 			role := user.Role // system-level fallback
 
-			if project := chi.URLParam(r, "project"); project != "" {
-				m, err := st.GetProjectMember(r.Context(), user.ID, project)
-				if err != nil || m == nil {
-					writeErr(w, http.StatusForbidden, "forbidden")
-					return
+			// System admins bypass per-project membership checks.
+			if user.Role != model.RoleAdmin {
+				if project := chi.URLParam(r, "project"); project != "" {
+					m, err := st.GetProjectMember(r.Context(), user.ID, project)
+					if err != nil || m == nil {
+						writeErr(w, http.StatusForbidden, "forbidden")
+						return
+					}
+					role = m.Role
 				}
-				role = m.Role
 			}
 
 			if roleRank[role] < roleRank[min] {
