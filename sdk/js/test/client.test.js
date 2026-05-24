@@ -303,8 +303,8 @@ describe("hashBucket cross-language", () => {
     // Compute the expected value using the same FNV-1a algorithm
     const input = "feature.x:user-42";
     const result = hashBucket(input);
-    // Verify it's in valid range and deterministic
-    assert.ok(result >= 0 && result < 100, `bucket ${result} out of range`);
+    // Pin the exact value so any hash divergence from the Go SDK is caught immediately.
+    assert.equal(result, 53, `Go SDK produces 53 for this input; JS got ${result}`);
     // Verify stability — same input always produces same output
     assert.equal(hashBucket(input), result);
     assert.equal(hashBucket(input), result);

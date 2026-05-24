@@ -88,7 +88,7 @@ export class Client {
     if (this.opts.mode === "sse") {
       this.startSSE();
     } else {
-      this.startPollLoop();
+      void this.startPollLoop();
     }
   }
 
@@ -164,7 +164,7 @@ export class Client {
   private startSSE(): void {
     if (typeof EventSource === "undefined") {
       this.log("EventSource not available, falling back to polling");
-      this.startPollLoop();
+      void this.startPollLoop();
       return;
     }
 
