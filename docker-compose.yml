@@ -1,0 +1,12 @@
+services:
+  configly:
+    build: .
+    ports: ["8080:8080"]
+    volumes: ["configly-data:/data"]
+    environment:
+      CONFIGLY_ADMIN_EMAIL: admin@configly.local
+      CONFIGLY_ADMIN_PASSWORD: ${CONFIGLY_ADMIN_PASSWORD:-changeme}
+    restart: unless-stopped
+
+volumes:
+  configly-data:

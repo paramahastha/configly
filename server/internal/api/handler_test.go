@@ -157,7 +157,10 @@ func TestSnapshotReturns200Then304(t *testing.T) {
 	r, _ := http.NewRequest("GET", te.server.URL+path, nil)
 	r.Header.Set("Authorization", "Bearer "+te.adminKey)
 	r.Header.Set("If-None-Match", etag)
-	resp2, _ := http.DefaultClient.Do(r)
+	resp2, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusNotModified {
 		t.Fatalf("want 304, got %d", resp2.StatusCode)
