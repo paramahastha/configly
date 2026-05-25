@@ -20,3 +20,8 @@ server/configly
 
 # OS artifacts
 .DS_Store
+
+# Zig toolchain (downloaded during CI, should never land in the repo)
+zig-linux-x86_64-*/
+zig-macos-*/
+zig-windows-*/
