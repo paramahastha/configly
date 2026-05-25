@@ -25,13 +25,14 @@ jobs:
 
       # zig cc is used as a drop-in CGO cross-compiler for all targets.
       # It handles Linux (musl static), macOS (SDK bundled), and Windows (MinGW).
+      # Installed under $HOME so the runner can write zig's cache without sudo.
       - name: Install zig
         run: |
           ZIG_VERSION=0.13.0
           curl -sSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
             | tar -xJ -C /tmp
-          sudo mv "/tmp/zig-linux-x86_64-${ZIG_VERSION}" /usr/local/zig
-          sudo ln -sf /usr/local/zig/zig /usr/local/bin/zig
+          mv "/tmp/zig-linux-x86_64-${ZIG_VERSION}" "$HOME/.zig"
+          sudo ln -sf "$HOME/.zig/zig" /usr/local/bin/zig
           zig version
 
       - name: Run GoReleaser
@@ -41,6 +42,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache
 
   publish-npm:
     name: Publish @configly/sdk to npm
