@@ -11,7 +11,6 @@ builds:
     binary: configly
     goos:
       - linux
-      - darwin
       - windows
     goarch:
       - amd64
@@ -38,22 +37,6 @@ builds:
           - CXX=zig c++ -target aarch64-linux-musl
         ldflags:
           - -s -w -extldflags "-static"
-      - goos: darwin
-        goarch: amd64
-        env:
-          - CGO_ENABLED=1
-          - CC=zig cc -target x86_64-macos
-          - CXX=zig c++ -target x86_64-macos
-        ldflags:
-          - -s -w
-      - goos: darwin
-        goarch: arm64
-        env:
-          - CGO_ENABLED=1
-          - CC=zig cc -target aarch64-macos
-          - CXX=zig c++ -target aarch64-macos
-        ldflags:
-          - -s -w
       - goos: windows
         goarch: amd64
         env:
