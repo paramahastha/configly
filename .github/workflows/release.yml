@@ -44,10 +44,60 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache
 
+  build-darwin:
+    name: Build macOS binaries
+    runs-on: macos-latest
+    needs: goreleaser
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Build and upload darwin binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+
+          # darwin/amd64
+          cd server
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC="clang -arch x86_64" \
+            go build -ldflags="-s -w" -o ../dist/configly ./cmd/configly
+          cd ..
+          STAGE=$(mktemp -d)
+          cp dist/configly LICENSE README.md CHANGELOG.md "$STAGE/"
+          tar czf dist/configly-darwin-amd64.tar.gz -C "$STAGE" .
+          rm -rf "$STAGE"
+
+          # darwin/arm64
+          cd server
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC="clang -arch arm64" \
+            go build -ldflags="-s -w" -o ../dist/configly ./cmd/configly
+          cd ..
+          STAGE=$(mktemp -d)
+          cp dist/configly LICENSE README.md CHANGELOG.md "$STAGE/"
+          tar czf dist/configly-darwin-arm64.tar.gz -C "$STAGE" .
+          rm -rf "$STAGE"
+
+          rm dist/configly
+
+          # checksums for darwin archives
+          cd dist
+          shasum -a 256 configly-darwin-*.tar.gz > checksums-darwin.txt
+
+          # upload to the release created by the goreleaser job
+          gh release upload ${{ github.ref_name }} \
+            configly-darwin-amd64.tar.gz \
+            configly-darwin-arm64.tar.gz \
+            checksums-darwin.txt
+
   publish-npm:
     name: Publish @configly/sdk to npm
     runs-on: ubuntu-latest
-    needs: goreleaser
+    needs: [goreleaser, build-darwin]
     steps:
       - uses: actions/checkout@v4
 
