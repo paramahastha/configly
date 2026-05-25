@@ -102,7 +102,7 @@ if cfg.IsEnabled("new_checkout", userID, false) {
 ### JS/TS SDK
 
 ```ts
-import { Client } from '@configly/sdk';
+import { Client } from '@paramahastha/configly';
 
 const cfg = new Client({
   url: 'http://localhost:8080',

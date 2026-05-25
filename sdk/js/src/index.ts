@@ -1,5 +1,5 @@
 /**
- * @configly/sdk — Browser + Node SDK for the Configly config & feature flag platform.
+ * @paramahastha/configly — Browser + Node SDK for the Configly config & feature flag platform.
  *
  * Zero runtime dependencies. get*() never throws. IsEnabled() uses FNV-1a → mod 100
  * for rollout buckets, matching the Go SDK exactly so cross-language rollouts are stable.

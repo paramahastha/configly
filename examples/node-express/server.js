@@ -4,7 +4,7 @@
 //
 // Then flip the "new_checkout" flag in the dashboard and watch the response change.
 import express from "express";
-import { Client } from "@configly/sdk";
+import { Client } from "@paramahastha/configly";
 
 const cfg = new Client({
   url: process.env.CONFIGLY_URL || "http://localhost:8080",
