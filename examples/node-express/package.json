@@ -8,7 +8,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@configly/sdk": "file:../../sdk/js",
+    "@paramahastha/configly": "file:../../sdk/js",
     "express": "^4.19.0"
   }
 }

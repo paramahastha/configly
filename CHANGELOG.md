@@ -45,7 +45,7 @@ First public release.
 - Background long-poll loop with exponential backoff (1 s → 30 s cap)
 - `If-None-Match` ETag short-circuit — unchanged snapshot costs one 304 round-trip
 
-**JS/TS SDK** (`sdk/js`, `@configly/sdk`)
+**JS/TS SDK** (`sdk/js`, `@paramahastha/configly`)
 - Browser + Node compatible, dual CJS/ESM output, < 5 KB gzipped
 - Same `IsEnabled` FNV-1a algorithm as the Go SDK (cross-language test locks this)
 - SSE mode for dashboards; falls back to polling when `EventSource` is unavailable
